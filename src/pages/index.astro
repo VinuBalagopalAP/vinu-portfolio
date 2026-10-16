@@ -1,0 +1,452 @@
+---
+import { site, projects, metrics, experience } from "../data/profile";
+
+const personId = `${site.url}#person`;
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${site.url}#website`,
+      url: site.url,
+      name: site.name,
+      description: site.description,
+      inLanguage: "en",
+      publisher: { "@id": personId }
+    },
+    {
+      "@type": "ProfilePage",
+      "@id": `${site.url}#profilepage`,
+      url: site.url,
+      name: site.title,
+      isPartOf: { "@id": `${site.url}#website` },
+      mainEntity: { "@id": personId }
+    },
+    {
+      "@type": "Person",
+      "@id": personId,
+      name: site.name,
+      url: site.url,
+      image: site.photo,
+      email: `mailto:${site.email}`,
+      jobTitle: site.jobTitle,
+      description: site.description,
+      worksFor: { "@type": "Organization", name: site.currentCompany.name, url: site.currentCompany.url },
+      alumniOf: { "@type": "CollegeOrUniversity", name: site.education.school },
+      address: { "@type": "PostalAddress", addressRegion: site.region, addressCountry: site.country },
+      sameAs: site.socials.map((s) => s.url),
+      knowsAbout: [
+        "Product Management",
+        "Product Engineering",
+        "Trading Systems",
+        "Trading Analytics",
+        "FastAPI",
+        "Next.js",
+        "Flutter",
+        "Pine Script",
+        "Programmatic SEO",
+        "Community Growth"
+      ]
+    },
+    ...projects.map((p) => ({
+      "@type": "SoftwareApplication",
+      name: p.name,
+      description: p.description,
+      applicationCategory: p.category,
+      keywords: p.tags.join(", "),
+      ...(p.links[0] ? { url: p.links[0].url } : {}),
+      creator: { "@id": personId }
+    }))
+  ]
+};
+
+// Medium posts are fetched at build time: Medium's feed has no CORS headers,
+// and third-party RSS-to-JSON proxies are unreliable.
+const mediumFeedUrl = "https://medium.com/feed/@vinubalagopalap";
+const mediumFallbackImage = "/medium_icon.webp";
+
+const decodeEntities = (str: string) =>
+  str
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+
+const readTag = (xml: string, tag: string) => {
+  const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`));
+  return match ? match[1].replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, "$1").trim() : "";
+};
+
+let posts: { title: string; link: string; date: string; image: string; snippet: string }[] = [];
+try {
+  const res = await fetch(mediumFeedUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const xml = await res.text();
+  posts = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(([, item]) => {
+    const content = readTag(item, "content:encoded");
+    const text = decodeEntities(content.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+    const image = content.match(/<img[^>]+src="([^">]+)"/)?.[1] ?? mediumFallbackImage;
+    return {
+      title: decodeEntities(readTag(item, "title")),
+      link: readTag(item, "link"),
+      date: new Date(readTag(item, "pubDate")).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      image,
+      snippet: text.length > 150 ? `${text.substring(0, 150)}...` : text
+    };
+  });
+} catch (err) {
+  console.warn("Could not fetch Medium feed at build time:", err);
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{site.title}</title>
+    <meta name="description" content={site.description} />
+    <meta name="author" content={site.name} />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#f8f9fa" />
+    <link rel="canonical" href={site.url} />
+    <link rel="icon" type="image/jpeg" href="/favicon.jpeg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="sitemap" type="application/xml" href={`${site.url}sitemap.xml`} />
+    <link rel="alternate" type="text/plain" title="LLM-readable summary" href={`${site.url}llms.txt`} />
+    {site.socials.map((s) => <link rel="me" href={s.url} />)}
+
+    <meta property="og:type" content="profile" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content={site.title} />
+    <meta property="og:description" content={site.description} />
+    <meta property="og:url" content={site.url} />
+    <meta property="og:image" content={site.image} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={`${site.name} — ${site.jobTitle}`} />
+    <meta property="profile:first_name" content="Vinu" />
+    <meta property="profile:last_name" content="Balagopal A P" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content={site.twitter} />
+    <meta name="twitter:creator" content={site.twitter} />
+    <meta name="twitter:title" content={site.title} />
+    <meta name="twitter:description" content={site.description} />
+    <meta name="twitter:image" content={site.image} />
+    <meta name="twitter:image:alt" content={`${site.name} — ${site.jobTitle}`} />
+
+    <script is:inline>document.documentElement.classList.add("js");</script>
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+  </head>
+  <body>
+    <nav class="navbar" aria-label="Primary">
+      <div class="left-section">
+        <a href="/">Home</a>
+      </div>
+      <button
+        type="button"
+        class="nav-toggle"
+        id="nav-toggle"
+        aria-expanded="false"
+        aria-controls="nav-links"
+        aria-label="Open menu"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+      <div class="social-buttons" id="nav-links">
+        <a href="#projects">Projects</a>
+        <span aria-hidden="true">|</span>
+        <a href="#about">About</a>
+        <span aria-hidden="true">|</span>
+        <a href="#experience">Experience</a>
+        <span aria-hidden="true">|</span>
+        <a href="#blogs">Blogs</a>
+        <span aria-hidden="true">|</span>
+        <a href="#contact">Contact</a>
+      </div>
+    </nav>
+
+    <main id="home">
+      <div class="profile-card">
+        <div class="profile-image">
+          <img
+            src="/profile_pic.webp"
+            alt="Vinu Balagopal A P"
+            title="Vinu Balagopal A P"
+            width="180"
+            height="180"
+            fetchpriority="high"
+            decoding="async"
+          />
+        </div>
+        <div class="profile-name">
+          <h1>Vinu Balagopal A P <span>👋</span></h1>
+        </div>
+      </div>
+
+      <div class="text-container">
+        <div class="v-shape">
+          <span>Building innovative products that</span>
+          <span>shape the future and create</span>
+          <span>global impact.</span>
+        </div>
+      </div>
+
+      <section class="metrics" aria-label="Impact">
+        {metrics.map((m) => (
+          <div>
+            <div class="metric-num">{m.num}</div>
+            <div class="metric-label">{m.label}</div>
+          </div>
+        ))}
+      </section>
+
+      <section class="projects" id="projects">
+        <h2>Projects</h2>
+        {projects.map((p) => (
+          <article>
+            <h3>{p.name}</h3>
+            <p class="item-meta">{p.category}</p>
+            <p>{p.description}</p>
+            <p class="item-tags">{p.tags.join(" · ")}</p>
+            {p.links.length > 0 && (
+              <div class="project-links">
+                {p.links.map((link) => (
+                  <u><a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a></u>
+                ))}
+              </div>
+            )}
+          </article>
+        ))}
+      </section>
+
+      <section class="about" id="about">
+        <h2>About</h2>
+        <p>
+          I'm a founder and product engineer with a track record of shipping 0→1 products across FinTech, EdTech, and analytics, moving between product strategy, engineering, and growth to take ideas from research to production.
+        </p>
+
+        <h3>Building Products</h3>
+        <p>
+          I'm currently building <u><a href="https://fillwire.com" target="_blank" rel="noopener noreferrer">FillWire</a></u>, a strategy execution and multi-account trade copier platform with an in-house strategy desk and a pre-broker risk firewall. Before that, I built <u><a href="https://toastlytics.com" target="_blank" rel="noopener noreferrer">Toastlytics</a></u>, an AI-powered trading journal and risk intelligence platform, solo across a FastAPI backend, a Next.js dashboard, a full SEO content engine, and an internal ops workspace. I also built <u><a href="https://claudforge.vercel.app/" target="_blank" rel="noopener noreferrer">ClaudForge</a></u>, a terminal-native, CI/CD-style deployment manager for Claude.ai Skills, and publish Pine Script indicators on TradingView.
+        </p>
+
+        <h3>Community and Ecosystem</h3>
+        <p>
+          Started my journey by organising 200+ community events and helping 28k+ students across India, specifically in Kerala. To drive the creation of a robust innovation ecosystem with grit and momentum by uniting stakeholders from industry, universities, community, and government at <u><a href="https://mulearn.org/" target="_blank" rel="noopener noreferrer">μLearn</a></u>, alongside <u><a href="https://www.linkedin.com/in/deepusnath" target="_blank" rel="noopener noreferrer">Deepu S Nath</a></u>. We built a strong network that includes over 47,000+ students, 250+ corporates, government bodies, and universities. I led the technology vertical, helped students build their expertise to land their dream job, and ran a campaign that grew the student startup pipeline from 20 ideas to 9,400 in three months.
+        </p>
+
+        <h3>Product and Engineering</h3>
+        <p>
+          My passion for technology and innovation led me to join the team behind <u><a href="https://finotes.com/" target="_blank" rel="noopener noreferrer">Finotes</a></u> and <u><a href="https://www.appxiom.com/" target="_blank" rel="noopener noreferrer">Appxiom</a></u>, a world-class product team spearheaded by <u><a href="https://www.linkedin.com/in/donpeter06" target="_blank" rel="noopener noreferrer">Don Peter</a></u> and <u><a href="https://www.linkedin.com/in/robinap" target="_blank" rel="noopener noreferrer">Robin Alex Panicker</a></u>. I contributed to building a lightweight SDK for mobile performance monitoring and bug detection, and later designed a goal-based analytics approach for Appxiom that maps engineering data directly to business outcomes.
+        </p>
+
+        <h3>Business and Strategy</h3>
+        <p>
+          At <u><a href="https://deienami.com/" target="_blank" rel="noopener noreferrer">DEIENAMI (Design, Innovation, Engineering via Ones and Zeros)</a></u>, I owned product strategy across medical SaaS, physical products, and B2B software, leading client engagement and go-to-market execution. With one FMCG client, we turned a debt position into profit within 3–4 months by rethinking retail locations and distribution channels and introducing new consumable product lines.
+        </p>
+      </section>
+
+      <section class="experience" id="experience">
+        <h2>Experience</h2>
+        {experience.map((job) => (
+          <article>
+            <h3>{job.role}</h3>
+            <p class="item-meta">
+              {job.url ? (
+                <u><a href={job.url} target="_blank" rel="noopener noreferrer">{job.org}</a></u>
+              ) : (
+                job.org
+              )}
+              {" · "}{[job.meta, job.dates].filter(Boolean).join(" · ")}
+            </p>
+            <p>{job.summary}</p>
+            <p class="item-tags">{job.tags.join(" · ")}</p>
+          </article>
+        ))}
+
+        {/* Skills & Tools and Education — hidden for now. To show them again, remove this comment wrapper
+           and add `skills` to the import from "../data/profile" at the top of this file.
+        <div class="experience-extra">
+          <h3>Skills & Tools</h3>
+          <dl class="skills">
+            {skills.map((row) => (
+              <div class="skills-row">
+                <dt>{row.group}</dt>
+                <dd>{row.items.join(" · ")}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <h3>Education</h3>
+          <p>
+            <strong>B.Tech, Computer Science & Engineering</strong><br />
+            KMCT College of Engineering, Kozhikode · APJ Abdul Kalam Technological University
+          </p>
+        </div>
+        */}
+      </section>
+
+      <section class="blog-section" id="blogs">
+        <div class="blog-heading">
+          <h2>Writing & Insights</h2>
+          <p class="blog-para">
+            Thoughts on technology, development, and market dynamics published on Medium.
+          </p>
+        </div>
+
+        <div class="cards-container" id="blog-posts">
+          {posts.length > 0 ? (
+            posts.map((post) => (
+              <div class="card">
+                <img
+                  src={post.image}
+                  alt={post.title}
+                  class="card-image"
+                  loading="lazy"
+                  decoding="async"
+                  onerror={`this.src='${mediumFallbackImage}'; this.onerror=null;`}
+                />
+                <div class="card-content">
+                  <h3 class="card-title">
+                    <a href={post.link} target="_blank" rel="noopener noreferrer">{post.title}</a>
+                  </h3>
+                  <div class="card-date">{post.date}</div>
+                  <p class="card-text">{post.snippet}</p>
+                  <a href={post.link} class="read-more" target="_blank" rel="noopener noreferrer">Read on Medium</a>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div class="blog-error">
+              <p>Could not load blog posts right now.</p>
+              <div class="blog-error-actions">
+                <a href="https://medium.com/@vinubalagopalap" target="_blank" rel="noopener noreferrer" class="read-more">Visit Medium</a>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer" id="contact">
+      <div class="left-section">
+        <a
+          class="footer-email"
+          id="email"
+          href="mailto:vinubalagopalap@gmail.com"
+          aria-label="Email Vinu Balagopal"
+        >vinubalagopalap@gmail.com</a>
+        <button
+          type="button"
+          class="copy-button"
+          id="copy-button"
+          aria-label="Copy email to clipboard"
+          title="Copy email"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="middle-section">
+        <p class="footer-email">© 2020–2026 Vinu Balagopal A P | All rights reserved.</p>
+      </div>
+
+      <div class="social-buttons">
+        <a href="https://www.linkedin.com/in/vinubalagopalap/" target="_blank" rel="me noopener noreferrer" aria-label="Visit LinkedIn profile">LinkedIn</a>
+        |
+        <a href="https://x.com/vinubalagopalap" target="_blank" rel="me noopener noreferrer" aria-label="Visit Twitter profile">Twitter</a>
+        |
+        <a href="https://medium.com/@vinubalagopalap" target="_blank" rel="me noopener noreferrer" aria-label="Visit Medium profile">Medium</a>
+        |
+        <a href="https://github.com/VinuBalagopalAP" target="_blank" rel="me noopener noreferrer" aria-label="Visit GitHub profile">GitHub</a>
+      </div>
+    </footer>
+
+    <div id="notification" role="status" aria-live="polite">Email copied to clipboard!</div>
+
+    <script is:inline>
+      // ===== Phone menu toggle =====
+      (() => {
+        const nav = document.querySelector(".navbar");
+        const toggle = document.getElementById("nav-toggle");
+        if (!nav || !toggle) return;
+
+        const setOpen = (open) => {
+          nav.classList.toggle("open", open);
+          toggle.setAttribute("aria-expanded", String(open));
+          toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+        };
+
+        toggle.addEventListener("click", () => setOpen(!nav.classList.contains("open")));
+        nav.querySelectorAll("#nav-links a").forEach((link) => link.addEventListener("click", () => setOpen(false)));
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && nav.classList.contains("open")) {
+            setOpen(false);
+            toggle.focus();
+          }
+        });
+      })();
+
+      // ===== Email copy with notification toast =====
+      (() => {
+        const copyButton = document.getElementById("copy-button");
+        const emailEl = document.getElementById("email");
+        const notification = document.getElementById("notification");
+        if (!copyButton || !emailEl || !notification) return;
+
+        function showNotification(message, isError = false) {
+          notification.textContent = message;
+          notification.classList.toggle("error", isError);
+          notification.classList.add("visible");
+          setTimeout(() => notification.classList.remove("visible"), 3000);
+        }
+
+        async function copyText(text) {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+          }
+          const tempInput = document.createElement("textarea");
+          tempInput.value = text;
+          tempInput.setAttribute("readonly", "");
+          tempInput.style.position = "absolute";
+          tempInput.style.left = "-9999px";
+          document.body.appendChild(tempInput);
+          tempInput.select();
+          document.execCommand("copy");
+          document.body.removeChild(tempInput);
+        }
+
+        copyButton.addEventListener("click", async () => {
+          try {
+            await copyText(emailEl.textContent.trim());
+            showNotification("Email copied to clipboard!");
+          } catch (err) {
+            console.error("Failed to copy email:", err);
+            showNotification("Copy failed. Please copy manually.", true);
+          }
+        });
+      })();
+
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  @import "../styles/global.css";
+</style>
